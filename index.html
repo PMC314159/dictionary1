@@ -449,7 +449,7 @@ input[type=range]{padding:0;border:0}
 
         <section class="main-layout">
           <div class="masthead">
-            <article class="main-art glass">
+            <article class="main-art glass" id="mainArt">
               <img id="mainImg" alt="">
               <div class="main-shade"></div>
               <div class="main-copy">
@@ -748,18 +748,43 @@ async function waitForCaptureFonts(){
 $("#saveBtn").addEventListener("click",async()=>{
   const b=$("#saveBtn"),old=b.textContent;
   b.textContent="저장 중…"; b.disabled=true;
+
+  const mainArt=$("#mainArt")||document.querySelector(".main-art");
+  const mainImg=$("#mainImg");
   const originalTransform=capture.style.transform;
+  const originalMainArtWidth=mainArt?.style.width||"";
+  const originalMainArtHeight=mainArt?.style.height||"";
+  const originalMainArtMinHeight=mainArt?.style.minHeight||"";
+
+  // 화면에 정상적으로 보이는 현재 크기를 저장 전에 픽셀값으로 잠근다.
+  // 이렇게 해야 단어 개수가 줄었을 때 캡처용 복제 DOM이 높이를 다시 계산하며
+  // 메인 일러스트를 납작하게 만드는 현상이 생기지 않는다.
+  const lockedMainArtWidth=mainArt?.offsetWidth||0;
+  const lockedMainArtHeight=mainArt?.offsetHeight||0;
+  const lockedObjectPosition=mainImg?.style.objectPosition||getComputedStyle(mainImg).objectPosition||"50% 50%";
+
   try{
     await waitForCaptureFonts();
+
+    if(mainArt&&lockedMainArtWidth&&lockedMainArtHeight){
+      mainArt.style.width=lockedMainArtWidth+"px";
+      mainArt.style.height=lockedMainArtHeight+"px";
+      mainArt.style.minHeight=lockedMainArtHeight+"px";
+    }
+
     capture.style.transform="none";
-    await new Promise(resolve=>requestAnimationFrame(resolve));
+    await new Promise(resolve=>{
+      requestAnimationFrame(()=>requestAnimationFrame(resolve));
+    });
+
     const canvas=await html2canvas(capture,{
       scale:2,
       useCORS:true,
       allowTaint:true,
       backgroundColor:null,
       logging:false,
-      windowWidth:760,
+      windowWidth:Math.ceil(capture.scrollWidth),
+      windowHeight:Math.ceil(capture.scrollHeight),
       onclone:clonedDoc=>{
         const clonedCapture=clonedDoc.querySelector("#capture");
         if(clonedCapture){
@@ -767,6 +792,28 @@ $("#saveBtn").addEventListener("click",async()=>{
           clonedCapture.style.overflow="hidden";
           clonedCapture.style.setProperty("border-radius","0","important");
           clonedCapture.style.setProperty("clip-path","none","important");
+
+          const clonedMainArt=clonedCapture.querySelector(".main-art");
+          const clonedMainImg=clonedCapture.querySelector("#mainImg");
+
+          if(clonedMainArt&&lockedMainArtWidth&&lockedMainArtHeight){
+            clonedMainArt.style.setProperty("width",lockedMainArtWidth+"px","important");
+            clonedMainArt.style.setProperty("height",lockedMainArtHeight+"px","important");
+            clonedMainArt.style.setProperty("min-height",lockedMainArtHeight+"px","important");
+            clonedMainArt.style.setProperty("max-height",lockedMainArtHeight+"px","important");
+            clonedMainArt.style.setProperty("aspect-ratio","auto","important");
+            clonedMainArt.style.setProperty("overflow","hidden","important");
+          }
+
+          if(clonedMainImg){
+            clonedMainImg.style.setProperty("position","absolute","important");
+            clonedMainImg.style.setProperty("inset","0","important");
+            clonedMainImg.style.setProperty("width","100%","important");
+            clonedMainImg.style.setProperty("height","100%","important");
+            clonedMainImg.style.setProperty("object-fit","cover","important");
+            clonedMainImg.style.setProperty("object-position",lockedObjectPosition,"important");
+            clonedMainImg.style.setProperty("transform","none","important");
+          }
         }
       }
     });
@@ -779,6 +826,13 @@ $("#saveBtn").addEventListener("click",async()=>{
     console.error(e);
   }finally{
     capture.style.transform=originalTransform;
+
+    if(mainArt){
+      mainArt.style.width=originalMainArtWidth;
+      mainArt.style.height=originalMainArtHeight;
+      mainArt.style.minHeight=originalMainArtMinHeight;
+    }
+
     syncPreviewSize();
     b.textContent=old;b.disabled=false;
   }
